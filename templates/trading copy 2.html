@@ -90,20 +90,6 @@
         margin: { l: 50, r: 50, b: 50, t: 50 }
     };
 
-    // Initialize the charts
-    function initCharts() {
-        let initialPriceTrace = { x: [], y: [], mode: 'lines', name: 'Actual Price' };
-        let initialPredictedTrace = { x: [], y: [], mode: 'lines', name: 'Predicted Price' };
-        priceChartData = [initialPriceTrace, initialPredictedTrace];
-        Plotly.newPlot('price-chart', priceChartData, priceChartLayout);
-
-        let initialTradePriceTrace = { x: [], y: [], mode: 'lines', name: 'Price' };
-        let initialBuyTrace = { x: [], y: [], mode: 'markers', name: 'Buy Actions', marker: { color: 'green', size: 10 } };
-        let initialSellTrace = { x: [], y: [], mode: 'markers', name: 'Sell Actions', marker: { color: 'red', size: 10 } };
-        tradeActionsData = [initialTradePriceTrace, initialBuyTrace, initialSellTrace];
-        Plotly.newPlot('trade-actions-chart', tradeActionsData, tradeActionsLayout);
-    }
-
     // Function to update the charts dynamically
     function fetchChartData() {
         fetch('/get-historical-data')
@@ -116,50 +102,29 @@
             .catch(error => console.error('Error fetching chart data:', error));
     }
 
-    // Use Plotly.react() to update the price chart without redrawing
     function updatePriceChart(timestamps, actualPrices, predictedPrices) {
-        priceChartData[0].x = timestamps;
-        priceChartData[0].y = actualPrices;
-        priceChartData[1].x = timestamps;
-        priceChartData[1].y = predictedPrices;
-
-        // Update the existing plot using Plotly.react for live updates
-        Plotly.react('price-chart', priceChartData, priceChartLayout);
+        let actualPriceTrace = { x: timestamps, y: actualPrices, mode: 'lines', name: 'Actual Price' };
+        let predictedPriceTrace = { x: timestamps, y: predictedPrices, mode: 'lines', name: 'Predicted Price' };
+        priceChartData = [actualPriceTrace, predictedPriceTrace];
+        Plotly.newPlot('price-chart', priceChartData, priceChartLayout);
     }
 
-    // Use Plotly.react() to update the trade actions chart without redrawing
     function updateTradeActionsChart(timestamps, actualPrices, tradeActions) {
-        tradeActionsData[0].x = timestamps;
-        tradeActionsData[0].y = actualPrices;
-
-        tradeActionsData[1].x = [];
-        tradeActionsData[1].y = [];
-        tradeActionsData[2].x = [];
-        tradeActionsData[2].y = [];
+        let priceTrace = { x: timestamps, y: actualPrices, mode: 'lines', name: 'Price' };
+        let buyActions = { x: [], y: [], mode: 'markers', name: 'Buy Actions', marker: { color: 'green', size: 10 } };
+        let sellActions = { x: [], y: [], mode: 'markers', name: 'Sell Actions', marker: { color: 'red', size: 10 } };
 
         for (let i = 0; i < tradeActions.length; i++) {
             if (tradeActions[i] === 'buy') {
-                tradeActionsData[1].x.push(timestamps[i]);
-                tradeActionsData[1].y.push(actualPrices[i]);
+                buyActions.x.push(timestamps[i]);
+                buyActions.y.push(actualPrices[i]);
             } else if (tradeActions[i] === 'sell') {
-                tradeActionsData[2].x.push(timestamps[i]);
-                tradeActionsData[2].y.push(actualPrices[i]);
+                sellActions.x.push(timestamps[i]);
+                sellActions.y.push(actualPrices[i]);
             }
         }
-
-        // Update the existing plot using Plotly.react for live updates
-        Plotly.react('trade-actions-chart', tradeActionsData, tradeActionsLayout);
-    }
-
-    // Use Plotly.react() to update the LSTM chart without redrawing
-    function updateLSTMChart(predictions) {
-        let futureSteps = [];
-        for (let i = 1; i <= predictions.length; i++) {
-            futureSteps.push(i);
-        }
-        let lstmTrace = { x: futureSteps, y: predictions, mode: 'lines', name: 'Predicted Price' };
-        lstmOutputData = [lstmTrace];
-        Plotly.react('lstm-graph', lstmOutputData, lstmOutputLayout);
+        tradeActionsData = [priceTrace, buyActions, sellActions];
+        Plotly.newPlot('trade-actions-chart', tradeActionsData, tradeActionsLayout);
     }
 
     function fetchLSTMData() {
@@ -171,7 +136,18 @@
             .catch(error => console.error('Error fetching LSTM data:', error));
     }
 
+    function updateLSTMChart(predictions) {
+        let futureSteps = [];
+        for (let i = 1; i <= predictions.length; i++) {
+            futureSteps.push(i);
+        }
+        let lstmTrace = { x: futureSteps, y: predictions, mode: 'lines', name: 'Predicted Price' };
+        lstmOutputData = [lstmTrace];
+        Plotly.newPlot('lstm-graph', lstmOutputData, lstmOutputLayout);
+    }
+
     function updateMetrics(metrics) {
+        // Log the metrics for debugging
         console.log("Metrics received:", metrics);
 
         // Update Next Predicted Price
@@ -250,9 +226,6 @@
                 document.getElementById('toggleAutoRetrainBtn').disabled = false;
             });
     }
-
-    // Initialize the charts
-    initCharts();
 
     // Periodically update charts and dashboard data
     setInterval(fetchChartData, 5000); // Update every 5 seconds

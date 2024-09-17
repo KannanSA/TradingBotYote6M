@@ -9,8 +9,8 @@ import joblib
 from collections import deque
 import tensorflow as tf
 from tensorflow.keras.models import Sequential, load_model
-from tensorflow.keras.layers import LSTM, GRU, Dropout, Dense
-from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.layers import LSTM, Dropout, Dense
+from sklearn.preprocessing import MinMaxScaler, RobustScaler
 import logging
 from functools import wraps
 
@@ -129,8 +129,8 @@ def compute_stochastic_oscillator(close, low, high, period=14):
 
 def preprocess_data(df):
     global scaler
-    # Using MinMaxScaler for data normalization
-    scaler = MinMaxScaler(feature_range=(0, 1))
+    # Using RobustScaler to handle outliers
+    scaler = RobustScaler()
     scaled_data = scaler.fit_transform(df)
     return scaled_data
 
@@ -145,17 +145,17 @@ def create_dataset(data, look_back=60):
         y.append(data[i, 3])  # 'close' price index
     return np.array(X), np.array(y)
 
-def create_improved_model(input_shape):
+def create_model(input_shape):
     from tensorflow.keras.optimizers import Adam
     model = Sequential()
-    model.add(LSTM(units=256, return_sequences=True, input_shape=input_shape))
-    model.add(Dropout(0.4))
-    model.add(LSTM(units=128, return_sequences=True))
-    model.add(Dropout(0.4))
-    model.add(GRU(units=64))
+    model.add(LSTM(units=128, return_sequences=True, input_shape=input_shape))
+    model.add(Dropout(0.3))
+    model.add(LSTM(units=64, return_sequences=True))
+    model.add(Dropout(0.3))
+    model.add(LSTM(units=32))
     model.add(Dropout(0.3))
     model.add(Dense(1))
-    optimizer = Adam(learning_rate=0.00005)  # Lower learning rate
+    optimizer = Adam(learning_rate=0.0001)  # Lower learning rate
     model.compile(loss='mean_squared_error', optimizer=optimizer)
     return model
 
@@ -170,21 +170,21 @@ def train_model(df):
         X_train, y_train = X[:split], y[:split]
         X_val, y_val = X[split:], y[split:]
 
-        model = create_improved_model((X_train.shape[1], X_train.shape[2]))
+        model = create_model((X_train.shape[1], X_train.shape[2]))
 
-        # Implement Early Stopping and Learning Rate Reduction
-        from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
+        # Implement Early Stopping with adjusted patience
+        from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
         early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
-        reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=5, min_lr=1e-6)
+        # ModelCheckpoint to save the best model
         checkpoint = ModelCheckpoint('best_model.h5', monitor='val_loss', save_best_only=True, verbose=1)
 
         # Increase epochs and adjust batch size
         history = model.fit(
             X_train, y_train,
             epochs=100,  # Increased number of epochs
-            batch_size=128,  # Adjusted batch size
+            batch_size=64,  # Adjusted batch size
             validation_data=(X_val, y_val),
-            callbacks=[early_stopping, reduce_lr, checkpoint],
+            callbacks=[early_stopping, checkpoint],
             verbose=1
         )
 
@@ -193,15 +193,11 @@ def train_model(df):
 
         # Evaluate model performance
         y_pred = model.predict(X_val)
-        from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error
+        from sklearn.metrics import mean_squared_error, mean_absolute_error
         mse = mean_squared_error(y_val, y_pred)
         mae = mean_absolute_error(y_val, y_pred)
-        mape = mean_absolute_percentage_error(y_val, y_pred)
-        rmse = np.sqrt(mse)
         logger.info(f'Validation MSE: {mse}')
         logger.info(f'Validation MAE: {mae}')
-        logger.info(f'Validation MAPE: {mape}')
-        logger.info(f'Validation RMSE: {rmse}')
 
         return True
     except Exception as e:
@@ -221,7 +217,7 @@ def generate_future_predictions(model, last_sequence, future_steps=10):
 
 def check_trading_condition(predictions, current_price):
     """
-    Checks if the LSTM predictions indicate a 2% increase or decrease from the current price.
+    Checks if the LSTM predictions indicate a 10% increase or decrease from the current price.
     Returns 'buy', 'sell', or 'hold'.
     """
     max_predicted_price = max(predictions)
@@ -230,9 +226,9 @@ def check_trading_condition(predictions, current_price):
     increase_percentage = ((max_predicted_price - current_price) / current_price) * 100
     decrease_percentage = ((current_price - min_predicted_price) / current_price) * 100
 
-    if increase_percentage >= 2:
+    if increase_percentage >= 10:
         return 'buy'
-    elif decrease_percentage >= 2:
+    elif decrease_percentage >= 10:
         return 'sell'
     else:
         return 'hold'
@@ -363,12 +359,13 @@ def automated_trading_task():
 
             predictions_scaled = generate_future_predictions(model, last_sequence, future_steps=10)
 
-            # Inverse transform predictions
             predictions = []
             for pred_scaled in predictions_scaled:
-                pred_full = np.zeros((1, eth_data.shape[1]))
-                pred_full[0, -1] = pred_scaled  # Only set the 'close' price
-                pred_inverse = scaler.inverse_transform(pred_full)[0][-1]
+                # Reconstruct the full feature array
+                last_data_point = eth_data.iloc[-1].values
+                pred_full = np.concatenate((last_data_point[:-1], [pred_scaled]))
+                pred_full = pred_full.reshape(1, -1)
+                pred_inverse = scaler.inverse_transform(pred_full)[0][3]  # 'close' price index
                 predictions.append(float(pred_inverse))
 
             # Automatic trading logic
@@ -526,10 +523,11 @@ def trading():
     prediction_scaled = model.predict(input_sequence)
 
     # Reconstruct the full feature array for inverse transformation
-    pred_full = np.zeros((1, eth_data.shape[1]))
-    pred_full[0, -1] = prediction_scaled[0][0]  # Only set the 'close' price
+    last_data_point = eth_data.iloc[-1].values
+    prediction_full = np.concatenate((last_data_point[:-1], prediction_scaled[0]))
+    prediction_full = prediction_full.reshape(1, -1)
 
-    next_price = scaler.inverse_transform(pred_full)[0][-1]  # 'close' price index
+    next_price = scaler.inverse_transform(prediction_full)[0][3]  # 'close' price index
 
     # Calculate prediction change
     current_price = eth_data['close'].iloc[-1]
@@ -601,9 +599,11 @@ def get_predictions():
     predictions_scaled = generate_future_predictions(model, last_sequence, future_steps=10)
     predictions = []
     for pred_scaled in predictions_scaled:
-        pred_full = np.zeros((1, eth_data.shape[1]))
-        pred_full[0, -1] = pred_scaled  # Only set the 'close' price
-        pred_inverse = scaler.inverse_transform(pred_full)[0][-1]
+        # Reconstruct the full feature array
+        last_data_point = eth_data.iloc[-1].values
+        pred_full = np.concatenate((last_data_point[:-1], [pred_scaled]))
+        pred_full = pred_full.reshape(1, -1)
+        pred_inverse = scaler.inverse_transform(pred_full)[0][3]  # 'close' price index
         predictions.append(float(pred_inverse))
     return jsonify({'predictions': predictions})
 
