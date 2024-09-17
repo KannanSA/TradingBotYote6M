@@ -19,4 +19,7 @@ enter your Binance APIs in the program
 username user1
 password password1
 
+
+![TradingBotYote1](/TradingBotYote1.png)
+![TradingBotYote2](/TradingBotYote2.png)
 ![TradingBotYote](/TradingBotYote.png)
