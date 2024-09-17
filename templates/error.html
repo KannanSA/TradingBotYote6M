@@ -1,0 +1,17 @@
+<!-- templates/error.html -->
+
+{% extends "base.html" %}
+{% block title %}Error{% endblock %}
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-6">
+        <div class="alert alert-danger text-center">
+            <h4 class="alert-heading">An Error Occurred</h4>
+            <p>{{ message }}</p>
+            <hr>
+            <p>Please try again or contact support if the problem persists.</p>
+            <a href="{{ url_for('index') }}" class="btn btn-primary">Go to Home</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

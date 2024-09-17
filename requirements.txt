@@ -1,0 +1,14 @@
+Flask
+pandas
+numpy
+tensorflow
+scikit-learn
+joblib
+bcrypt
+python-binance
+plotly
+firebase-admin
+apscheduler
+requests
+requests-oauthlib
+google-auth

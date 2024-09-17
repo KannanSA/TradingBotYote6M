@@ -1,0 +1,241 @@
+<!-- templates/trading.html -->
+
+{% extends "base.html" %}
+{% block title %}Trading Dashboard{% endblock %}
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h2 class="text-center">Trading Dashboard</h2>
+        <p class="text-center">
+            Next Predicted Price: <strong id="next-price">${{ next_price | round(2) }}</strong>
+        </p>
+        <p class="text-center">
+            Prediction Change: <strong id="prediction-change">{{ prediction_change | round(2) }}%</strong>
+        </p>
+        <p class="text-center">
+            Total Profit: <strong id="total-profit">${{ total_profit | round(2) }}</strong>
+        </p>
+        <p class="text-center">
+            Total Trades: <strong id="total-trades">{{ total_trades }}</strong>
+        </p>
+    </div>
+</div>
+
+<!-- Price Chart -->
+<div class="row mt-5">
+    <div class="col-md-12">
+        <div id="price-chart" style="height: 500px;"></div>
+    </div>
+</div>
+
+<!-- Trade Actions Chart -->
+<div class="row mt-5">
+    <div class="col-md-12">
+        <div id="trade-actions-chart" style="height: 500px;"></div>
+    </div>
+</div>
+
+<!-- LSTM Output Graph -->
+<div class="row mt-5">
+    <div class="col-md-12">
+        <div id="lstm-graph" style="height: 500px;"></div>
+    </div>
+</div>
+
+<!-- Buttons -->
+<div class="row mt-4 mb-5">
+    <div class="col-md-12 text-center">
+        <button id="manualBuyBtn" class="btn btn-success btn-lg mr-2" onclick="manualBuy()">Manual Buy</button>
+        <button id="manualSellBtn" class="btn btn-danger btn-lg ml-2" onclick="manualSell()">Manual Sell</button>
+    </div>
+</div>
+
+<!-- Retrain Buttons -->
+<div class="row mt-4 mb-5">
+    <div class="col-md-12 text-center">
+        <button id="retrainBtn" class="btn btn-primary btn-lg mr-2" onclick="startRetrain()">Retrain Model Now</button>
+        <button id="toggleAutoRetrainBtn" class="btn btn-secondary btn-lg ml-2" onclick="toggleAutoRetrain()">
+            {{ 'Stop' if auto_retrain else 'Start' }} Auto Retrain
+        </button>
+    </div>
+</div>
+
+{% block scripts %}
+<!-- Include Plotly.js -->
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+<script>
+    // Variables to hold chart data
+    let priceChartData = [];
+    let tradeActionsData = [];
+    let lstmOutputData = [];
+
+    // Layout configurations
+    const priceChartLayout = {
+        title: 'Actual vs. Predicted Prices',
+        xaxis: { title: 'Time' },
+        yaxis: { title: 'Price (USD)' },
+        margin: { l: 50, r: 50, b: 50, t: 50 }
+    };
+
+    const tradeActionsLayout = {
+        title: 'Trade Actions Overlay',
+        xaxis: { title: 'Time' },
+        yaxis: { title: 'Price (USD)' },
+        margin: { l: 50, r: 50, b: 50, t: 50 }
+    };
+
+    const lstmOutputLayout = {
+        title: 'LSTM Future Predictions',
+        xaxis: { title: 'Future Time Steps' },
+        yaxis: { title: 'Predicted Price (USD)' },
+        margin: { l: 50, r: 50, b: 50, t: 50 }
+    };
+
+    // Function to update the charts dynamically
+    function fetchChartData() {
+        fetch('/get-historical-data')
+            .then(response => response.json())
+            .then(data => {
+                updatePriceChart(data.timestamps, data.actual_prices, data.predicted_prices);
+                updateTradeActionsChart(data.timestamps, data.actual_prices, data.trade_actions);
+                updateMetrics(data.metrics);
+            })
+            .catch(error => console.error('Error fetching chart data:', error));
+    }
+
+    function updatePriceChart(timestamps, actualPrices, predictedPrices) {
+        let actualPriceTrace = { x: timestamps, y: actualPrices, mode: 'lines', name: 'Actual Price' };
+        let predictedPriceTrace = { x: timestamps, y: predictedPrices, mode: 'lines', name: 'Predicted Price' };
+        priceChartData = [actualPriceTrace, predictedPriceTrace];
+        Plotly.newPlot('price-chart', priceChartData, priceChartLayout);
+    }
+
+    function updateTradeActionsChart(timestamps, actualPrices, tradeActions) {
+        let priceTrace = { x: timestamps, y: actualPrices, mode: 'lines', name: 'Price' };
+        let buyActions = { x: [], y: [], mode: 'markers', name: 'Buy Actions', marker: { color: 'green', size: 10 } };
+        let sellActions = { x: [], y: [], mode: 'markers', name: 'Sell Actions', marker: { color: 'red', size: 10 } };
+
+        for (let i = 0; i < tradeActions.length; i++) {
+            if (tradeActions[i] === 'buy') {
+                buyActions.x.push(timestamps[i]);
+                buyActions.y.push(actualPrices[i]);
+            } else if (tradeActions[i] === 'sell') {
+                sellActions.x.push(timestamps[i]);
+                sellActions.y.push(actualPrices[i]);
+            }
+        }
+        tradeActionsData = [priceTrace, buyActions, sellActions];
+        Plotly.newPlot('trade-actions-chart', tradeActionsData, tradeActionsLayout);
+    }
+
+    function fetchLSTMData() {
+        fetch('/get-predictions')
+            .then(response => response.json())
+            .then(data => {
+                updateLSTMChart(data.predictions);
+            })
+            .catch(error => console.error('Error fetching LSTM data:', error));
+    }
+
+    function updateLSTMChart(predictions) {
+        let futureSteps = [];
+        for (let i = 1; i <= predictions.length; i++) {
+            futureSteps.push(i);
+        }
+        let lstmTrace = { x: futureSteps, y: predictions, mode: 'lines', name: 'Predicted Price' };
+        lstmOutputData = [lstmTrace];
+        Plotly.newPlot('lstm-graph', lstmOutputData, lstmOutputLayout);
+    }
+
+    function updateMetrics(metrics) {
+        // Log the metrics for debugging
+        console.log("Metrics received:", metrics);
+
+        // Update Next Predicted Price
+        if (metrics.next_price && metrics.next_price !== 0) {
+            document.getElementById('next-price').innerText = '$' + parseFloat(metrics.next_price).toFixed(2);
+        }
+
+        // Update Prediction Change
+        if (metrics.prediction_change && metrics.prediction_change !== 0) {
+            document.getElementById('prediction-change').innerText = parseFloat(metrics.prediction_change).toFixed(2) + '%';
+        }
+
+        // Update Total Profit
+        document.getElementById('total-profit').innerText = '$' + parseFloat(metrics.total_profit).toFixed(2);
+
+        // Update Total Trades
+        document.getElementById('total-trades').innerText = metrics.total_trades;
+    }
+
+    // Trigger manual buy action
+    function manualBuy() {
+        document.getElementById('manualBuyBtn').disabled = true;
+        fetch('/manual-buy')
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message);
+                document.getElementById('manualBuyBtn').disabled = false;
+            })
+            .catch(error => {
+                console.error('Error during manual buy:', error);
+                document.getElementById('manualBuyBtn').disabled = false;
+            });
+    }
+
+    // Trigger manual sell action
+    function manualSell() {
+        document.getElementById('manualSellBtn').disabled = true;
+        fetch('/manual-sell')
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message);
+                document.getElementById('manualSellBtn').disabled = false;
+            })
+            .catch(error => {
+                console.error('Error during manual sell:', error);
+                document.getElementById('manualSellBtn').disabled = false;
+            });
+    }
+
+    // Trigger model retraining
+    function startRetrain() {
+        document.getElementById('retrainBtn').disabled = true;
+        fetch('/start-retrain', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message);
+                document.getElementById('retrainBtn').disabled = false;
+            })
+            .catch(error => {
+                console.error('Error during retraining:', error);
+                document.getElementById('retrainBtn').disabled = false;
+            });
+    }
+
+    // Toggle auto retrain
+    function toggleAutoRetrain() {
+        document.getElementById('toggleAutoRetrainBtn').disabled = true;
+        fetch('/toggle-auto-retrain', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message);
+                location.reload();
+            })
+            .catch(error => {
+                console.error('Error toggling auto retrain:', error);
+                document.getElementById('toggleAutoRetrainBtn').disabled = false;
+            });
+    }
+
+    // Periodically update charts and dashboard data
+    setInterval(fetchChartData, 5000); // Update every 5 seconds
+    fetchChartData(); // Initial fetch to load charts
+
+    setInterval(fetchLSTMData, 5000); // Update LSTM graph every 5 seconds
+    fetchLSTMData(); // Initial fetch to load LSTM graph
+</script>
+{% endblock %}
+{% endblock %}
+

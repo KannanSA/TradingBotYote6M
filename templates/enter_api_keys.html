@@ -1,0 +1,25 @@
+<!-- templates/enter_api_keys.html -->
+
+{% extends "base.html" %}
+{% block title %}Enter API Keys{% endblock %}
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-6">
+        <h2 class="text-center mb-4">Enter Binance API Keys</h2>
+        {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+        <form action="{{ url_for('enter_api_keys') }}" method="post">
+            <div class="form-group">
+                <label for="api_key">API Key:</label>
+                <input type="text" id="api_key" name="api_key" class="form-control" required placeholder="Enter your Binance API Key">
+            </div>
+            <div class="form-group">
+                <label for="api_secret">API Secret:</label>
+                <input type="password" id="api_secret" name="api_secret" class="form-control" required placeholder="Enter your Binance API Secret">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Save API Keys</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
