@@ -1,3 +1,5 @@
+# app.py
+
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash
 from apscheduler.schedulers.background import BackgroundScheduler
 from binance.client import Client
@@ -410,8 +412,7 @@ def retrain_model_task():
 
 # Scheduler setup
 scheduler = BackgroundScheduler()
-# Schedule automated trading task every 1 minute
-scheduler.add_job(func=automated_trading_task, trigger="interval", minutes=1)
+scheduler.add_job(func=automated_trading_task, trigger="interval", minutes=5)
 # Schedule retrain every 6 hours
 scheduler.add_job(func=retrain_model_task, trigger="interval", hours=6, id='auto_retrain_job')
 auto_retrain = True
