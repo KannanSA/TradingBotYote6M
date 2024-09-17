@@ -2,4 +2,3 @@ serviceAccountKey.json
 __pycache__/
 *.pyc
 uploads/
-scaler.save
