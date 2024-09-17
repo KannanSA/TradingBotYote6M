@@ -366,9 +366,11 @@ def automated_trading_task():
             # Inverse transform predictions
             predictions = []
             for pred_scaled in predictions_scaled:
-                pred_full = np.zeros((1, eth_data.shape[1]))
-                pred_full[0, -1] = pred_scaled  # Only set the 'close' price
-                pred_inverse = scaler.inverse_transform(pred_full)[0][-1]
+                last_scaled_data_point = eth_data_scaled[-1, :].copy()
+                predicted_scaled_data_point = last_scaled_data_point.copy()
+                predicted_scaled_data_point[3] = pred_scaled  # Replace 'close' price (index 3)
+                predicted_scaled_data_point = predicted_scaled_data_point.reshape(1, -1)
+                pred_inverse = scaler.inverse_transform(predicted_scaled_data_point)[0][3]
                 predictions.append(float(pred_inverse))
 
             # Automatic trading logic
@@ -525,11 +527,13 @@ def trading():
     # Proceed with prediction
     prediction_scaled = model.predict(input_sequence)
 
-    # Reconstruct the full feature array for inverse transformation
-    pred_full = np.zeros((1, eth_data.shape[1]))
-    pred_full[0, -1] = prediction_scaled[0][0]  # Only set the 'close' price
+    # Correct inverse transformation
+    last_scaled_data_point = eth_data_scaled[-1, :].copy()
+    predicted_scaled_data_point = last_scaled_data_point.copy()
+    predicted_scaled_data_point[3] = prediction_scaled[0][0]  # Replace 'close' price (index 3)
+    predicted_scaled_data_point = predicted_scaled_data_point.reshape(1, -1)
 
-    next_price = scaler.inverse_transform(pred_full)[0][-1]  # 'close' price index
+    next_price = scaler.inverse_transform(predicted_scaled_data_point)[0][3]  # 'close' price index
 
     # Calculate prediction change
     current_price = eth_data['close'].iloc[-1]
@@ -601,9 +605,11 @@ def get_predictions():
     predictions_scaled = generate_future_predictions(model, last_sequence, future_steps=10)
     predictions = []
     for pred_scaled in predictions_scaled:
-        pred_full = np.zeros((1, eth_data.shape[1]))
-        pred_full[0, -1] = pred_scaled  # Only set the 'close' price
-        pred_inverse = scaler.inverse_transform(pred_full)[0][-1]
+        last_scaled_data_point = eth_data_scaled[-1, :].copy()
+        predicted_scaled_data_point = last_scaled_data_point.copy()
+        predicted_scaled_data_point[3] = pred_scaled  # Replace 'close' price (index 3)
+        predicted_scaled_data_point = predicted_scaled_data_point.reshape(1, -1)
+        pred_inverse = scaler.inverse_transform(predicted_scaled_data_point)[0][3]
         predictions.append(float(pred_inverse))
     return jsonify({'predictions': predictions})
 
