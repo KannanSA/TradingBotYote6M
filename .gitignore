@@ -2,5 +2,4 @@ serviceAccountKey.json
 __pycache__/
 *.pyc
 uploads/
-eth_price_model.h5
 scaler.save
