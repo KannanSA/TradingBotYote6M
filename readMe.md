@@ -15,6 +15,9 @@ conda activate trading
 python3 app.py
 ```
 
+```bash
+conda env export > environment.yml
+```
 enter your Binance APIs in the program
 username user1
 password password1
