@@ -417,8 +417,8 @@ def retrain_model_task():
 scheduler = BackgroundScheduler()
 # Schedule automated trading task every 1 minute
 scheduler.add_job(func=automated_trading_task, trigger="interval", minutes=1)
-# Schedule retrain every 6 hours
-scheduler.add_job(func=retrain_model_task, trigger="interval", hours=6, id='auto_retrain_job')
+# Schedule retrain every 6 minutes
+scheduler.add_job(func=retrain_model_task, trigger="interval", minutes=6, id='auto_retrain_job')
 auto_retrain = True
 
 # Helper function for login required
@@ -654,7 +654,7 @@ def toggle_auto_retrain():
         message = 'Automatic retraining stopped.'
     else:
         # Start auto retrain
-        scheduler.add_job(func=retrain_model_task, trigger="interval", hours=6, id='auto_retrain_job')
+        scheduler.add_job(func=retrain_model_task, trigger="interval", minutes=6, id='auto_retrain_job')
         auto_retrain = True
         message = 'Automatic retraining started.'
     return jsonify({'message': message})
